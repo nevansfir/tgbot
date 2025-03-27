@@ -10,7 +10,6 @@ from telegram.ext import (
     filters,
     ContextTypes
 )
-from telegram.error import Conflict
 
 # Загрузка переменных окружения
 load_dotenv()
@@ -49,41 +48,26 @@ async def main():
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     try:
-        # Для локального тестирования используем polling
-        if os.getenv("RENDER") is None:
-            print("🚀 Бот запущен в режиме polling...")
-            await application.initialize()
-            await application.start()
-            await application.updater.start_polling(
-                allowed_updates=Update.ALL_TYPES,
-                drop_pending_updates=True
-            )
-            await asyncio.Event().wait()  # Бесконечное ожидание
-            
-        # На Render используем webhook
-        else:
-            print("🚀 Бот запущен в режиме webhook...")
-            await application.initialize()
-            await application.start()
-            await application.bot.set_webhook(
-                url=f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/webhook"
-            )
+        print("🚀 Запуск бота в режиме webhook...")
+        await application.initialize()
+        await application.start()
+        await application.bot.set_webhook(
+            url="https://tgbot.onrender.com/webhook",
+            secret_token=os.getenv("WEBHOOK_SECRET")
+        )
+        
+        async with application:
             await application.run_webhook(
                 listen="0.0.0.0",
-                port=int(os.getenv("PORT", 10000)),
-                webhook_url=f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/webhook",
-                secret_token=os.getenv("WEBHOOK_SECRET", "secret")
+                port=10000,
+                webhook_url="https://tgbot.onrender.com/webhook",
+                secret_token=os.getenv("WEBHOOK_SECRET")
             )
             
-    except Conflict:
-        print("⚠️ Ошибка: Бот уже запущен в другом месте!")
     except Exception as e:
-        print(f"⚠️ Критическая ошибка: {e}")
+        print(f"⚠️ Ошибка: {e}")
     finally:
-        print("⏹️ Остановка бота...")
-        await application.stop()
-        await application.shutdown()
-        print("✅ Бот успешно остановлен")
+        print("⏹️ Бот остановлен")
 
 if __name__ == "__main__":
     asyncio.run(main())
