@@ -4,9 +4,8 @@ from dotenv import load_dotenv
 from telegram import ReplyKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
-# Загружаем переменные из .env
 load_dotenv()
-TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")  # Токен теперь берется из переменных окружения
+TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 async def start(update, context):
     buttons = [
