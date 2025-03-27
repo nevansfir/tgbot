@@ -36,7 +36,19 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    application.run_polling()
+    # Настройка webhook для Render.com (порт 10000)
+    RENDER_EXTERNAL_HOSTNAME = os.getenv('RENDER_EXTERNAL_HOSTNAME')
+    if RENDER_EXTERNAL_HOSTNAME:
+        PORT = 10000
+        application.run_webhook(
+            listen="0.0.0.0",
+            port=PORT,
+            url_path=TOKEN,
+            webhook_url=f"https://{RENDER_EXTERNAL_HOSTNAME}/{TOKEN}"
+        )
+    else:
+        # Локальный режим (polling) для отладки
+        application.run_polling()
 
 if __name__ == "__main__":
     main()
