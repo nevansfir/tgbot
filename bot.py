@@ -14,60 +14,86 @@ from telegram.ext import (
 # Загрузка переменных окружения
 load_dotenv()
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET")
+WEBHOOK_URL = f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/webhook"
 
-async def main():
-    # Создаем приложение
-    application = Application.builder().token(TOKEN).build()
+async def check_secret_token(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    """Проверка секретного токена вебхука"""
+    if not WEBHOOK_SECRET:
+        return True
+        
+    secret_header = update.effective_message.webhook_data.get('secret') if update.effective_message else None
+    return secret_header == WEBHOOK_SECRET
 
-    # Клавиатуры
-    main_keyboard = ReplyKeyboardMarkup([
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await check_secret_token(update, context):
+        return
+        
+    buttons = [
         ["Заказать эдит", "Купить проект"],
         ["Отзывы", "Портфолио"]
-    ], resize_keyboard=True)
+    ]
+    await update.message.reply_text(
+        "Привет! Выбери действие:",
+        reply_markup=ReplyKeyboardMarkup(buttons, resize_keyboard=True)
+    )
 
-    # Обработчики команд
-    async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await update.message.reply_text(
-            "Привет! Выбери действие:",
-            reply_markup=main_keyboard
-        )
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await check_secret_token(update, context):
+        return
 
-    async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-        text = update.message.text
-        if text == "Портфолио":
-            await update.message.reply_text("Мои работы: [ссылка на портфолио]")
-        elif text == "Заказать эдит":
-            await update.message.reply_text("Опишите, какой эдит вам нужен:")
-        elif text == "Купить проект":
-            await update.message.reply_text("Доступные проекты: [ссылка на каталог]")
-        elif text == "Отзывы":
-            await update.message.reply_text("Отзывы клиентов: [ссылка на отзывы]")
+    text = update.message.text
+    if text == "Портфолио":
+        await update.message.reply_text("Мои работы: [ссылка на портфолио]")
+    elif text == "Заказать эдит":
+        await update.message.reply_text("Опишите, какой эдит вам нужен:")
+    elif text == "Купить проект":
+        await update.message.reply_text("Доступные проекты: [ссылка на каталог]")
+    elif text == "Отзывы":
+        await update.message.reply_text("Отзывы клиентов: [ссылка на отзывы]")
 
-    # Настройка обработчиков
+async def setup_webhook(app: Application):
+    """Настройка вебхука с секретным токеном"""
+    await app.bot.set_webhook(
+        url=WEBHOOK_URL,
+        secret_token=WEBHOOK_SECRET,
+        allowed_updates=Update.ALL_TYPES,
+        drop_pending_updates=True
+    )
+
+async def main():
+    # Создание приложения
+    application = Application.builder().token(TOKEN).build()
+
+    # Регистрация обработчиков
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     try:
-        print("🚀 Запуск бота в режиме webhook...")
+        print("🚀 Инициализация бота...")
         await application.initialize()
-        await application.start()
-        await application.bot.set_webhook(
-            url="https://tgbot.onrender.com/webhook",
-            secret_token=os.getenv("WEBHOOK_SECRET")
-        )
         
-        async with application:
+        if os.getenv("RENDER"):
+            print("🌐 Режим: Webhook")
+            await setup_webhook(application)
             await application.run_webhook(
                 listen="0.0.0.0",
-                port=10000,
-                webhook_url="https://tgbot.onrender.com/webhook",
-                secret_token=os.getenv("WEBHOOK_SECRET")
+                port=int(os.getenv("PORT", 10000)),
+                secret_token=WEBHOOK_SECRET,
+                webhook_url=WEBHOOK_URL
             )
+        else:
+            print("🔄 Режим: Polling")
+            await application.run_polling()
             
     except Exception as e:
         print(f"⚠️ Ошибка: {e}")
     finally:
-        print("⏹️ Бот остановлен")
+        if application.running:
+            print("⏹️ Остановка бота...")
+            await application.stop()
+            await application.shutdown()
+        print("✅ Бот завершил работу")
 
 if __name__ == "__main__":
     asyncio.run(main())
